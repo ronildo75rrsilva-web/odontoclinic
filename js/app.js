@@ -1201,7 +1201,7 @@ function txTable(list, showPatient = true) {
       ${showPatient ? `<td>${t.patientId ? `<a style="cursor:pointer" data-action="open-patient" data-id="${t.patientId}">${esc(patientName(t.patientId))}</a>` : '<span class="muted">—</span>'}</td>` : ''}
       <td>${esc(t.category || '-')}</td>
       <td>${esc(t.method || '-')}</td>
-      <td style="font-weight:700;color:${t.status === 'pendente' ? 'var(--danger)' : (t.type === 'receita' ? 'var(--success)' : 'var(--danger)')}">${t.type === 'receita' ? '+' : '−'} ${money(t.value)}</td>
+      <td style="font-weight:700;color:${t.status === 'pago' ? 'var(--success)' : 'var(--danger)'}">${t.type === 'receita' ? '+' : '−'} ${money(t.value)}</td>
       <td>${t.status === 'pago' ? '<span class="badge b-green">Pago</span>' : overdue ? '<span class="badge b-red">Vencido</span>' : '<span class="badge b-orange">Pendente</span>'}</td>
       <td class="td-actions no-print">
         ${t.status !== 'pago' ? `<button class="btn btn-sm" data-action="pay-tx" data-id="${t.id}">${icon('check')} Baixar</button>` : ''}
