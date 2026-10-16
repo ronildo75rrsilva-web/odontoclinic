@@ -19,7 +19,7 @@
         </div>
       </div>
       <nav class="nav" id="nav">
-        <a data-view="dashboard" class="active"><span class="ico" data-icon="dashboard"></span>Painel</a>
+        <a data-view="dashboard" class="active"><span class="ico" data-icon="dashboard"></span>Visão geral</a>
         <a data-view="patients"><span class="ico" data-icon="users"></span>Pacientes</a>
         <a data-view="agenda"><span class="ico" data-icon="calendar"></span>Agenda</a>
         <a data-view="finance"><span class="ico" data-icon="money"></span>Financeiro</a>
@@ -35,10 +35,14 @@
 
     <main class="main">
       <header class="topbar">
-        <button class="btn-icon menu-toggle" id="menuToggle" title="Menu"><span data-icon="menu"></span></button>
+        <button class="btn-icon menu-toggle" id="menuToggle" title="Menu e visão geral"><span data-icon="more"></span></button>
         <div>
           <h1 id="pageTitle">Painel</h1>
           <p id="pageSubtitle" class="muted">Visão geral do consultório</p>
+        </div>
+        <div class="topbar-clock" id="topbarClock" aria-live="polite">
+          <div class="topbar-clock-date" id="liveDate"></div>
+          <div class="topbar-clock-time" id="liveClock">00:00:00</div>
         </div>
         <div class="topbar-actions">
           <div class="search-global">
@@ -47,6 +51,7 @@
             <div class="search-results" id="searchResults"></div>
           </div>
           <button class="btn btn-primary" id="quickNewPatient"><span data-icon="plus"></span>Novo paciente</button>
+          <button class="btn-icon" id="overviewMenuBtn" title="Visão geral do consultório"><span data-icon="more"></span></button>
         </div>
       </header>
 

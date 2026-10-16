@@ -12,6 +12,7 @@ const ICONS = {
   money: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   menu: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
+  more: '<circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>',
   search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
@@ -222,6 +223,7 @@ const state = {
   patientTab: 'resumo',
   patientsMode: localStorage.getItem('oc_mode') || 'grid',
   patientsSort: 'name',
+  patientsCare: 'ativo',
   brush: 'carie',
   agendaDate: todayISO(),
   calMonth: monthKey(),
@@ -229,6 +231,14 @@ const state = {
   financeType: 'all',
   financeStatus: 'all'
 };
+
+function isActiveCare(p) { return (p.careStatus || 'ativo') !== 'historico'; }
+function patientTreatmentsOf(id) { return db.treatments.filter((t) => t.patientId === id); }
+function hasOpenTreatments(id) { return patientTreatmentsOf(id).some((t) => t.status !== 'concluido'); }
+function lastFinishedTreat(id) {
+  return patientTreatmentsOf(id).filter((t) => t.status === 'concluido')
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0] || null;
+}
 
 function toast(msg, type = 'ok') {
   const el = document.createElement('div');
@@ -486,7 +496,23 @@ function renderChart() {
    PACIENTES
    ========================================================= */
 function renderPatients() {
+  const activeN = db.patients.filter(isActiveCare).length;
+  const histN = db.patients.filter((p) => !isActiveCare(p)).length;
+  const isHist = state.patientsCare === 'historico';
   return `
+  <div class="care-switch">
+    <button class="${!isHist ? 'active' : ''}" data-action="set-care" data-care="ativo">${icon('activity')} Em atendimento <span class="badge ${!isHist ? 'b-teal' : 'b-gray'}">${activeN}</span></button>
+    <button class="${isHist ? 'active' : ''}" data-action="set-care" data-care="historico">${icon('database')} Histórico <span class="badge ${isHist ? 'b-green' : 'b-gray'}">${histN}</span></button>
+  </div>
+  ${isHist ? `<div class="card history-banner" style="margin-bottom:18px">
+    <div class="card-body" style="display:flex;gap:14px;align-items:flex-start">
+      ${icon('database')}
+      <div>
+        <strong>Histórico de pacientes com tratamento finalizado</strong>
+        <p class="muted small" style="margin:6px 0 0">Aqui ficam os pacientes cujo atendimento foi concluído. Ao retornar, use <strong>Retomar atendimento</strong> para movê-los de volta à área Em atendimento, com todo o prontuário e histórico preservados.</p>
+      </div>
+    </div>
+  </div>` : ''}
   <div class="toolbar">
     <input class="input" id="patientFilter" data-input="patient-filter" placeholder="Filtrar por nome, CPF, telefone ou cidade..." value="${esc(state.patientsFilter || '')}">
     <select class="input" style="max-width:200px" data-change="patient-sort">
@@ -498,26 +524,33 @@ function renderPatients() {
       <button class="${state.patientsMode === 'table' ? 'active' : ''}" data-action="set-mode" data-mode="table" title="Lista">${icon('list')}</button>
     </div>
     <span class="muted" id="patientCount"></span>
-    <button class="btn btn-primary" style="margin-left:auto" data-action="new-patient">${icon('userPlus')} Cadastrar paciente</button>
+    ${!isHist ? `<button class="btn btn-primary" style="margin-left:auto" data-action="new-patient">${icon('userPlus')} Cadastrar paciente</button>` : '<div style="margin-left:auto"></div>'}
   </div>
   <div id="patientsList"></div>`;
 }
 function renderPatientsList() {
   const q = (state.patientsFilter || '').toLowerCase().trim();
   const qd = digits(q);
-  let list = db.patients.filter((p) => !q
+  const wantHist = state.patientsCare === 'historico';
+  let list = db.patients.filter((p) => wantHist ? !isActiveCare(p) : isActiveCare(p));
+  list = list.filter((p) => !q
     || p.name.toLowerCase().includes(q)
     || (p.city || '').toLowerCase().includes(q)
     || (p.email || '').toLowerCase().includes(q)
     || (qd && (digits(p.cpf).includes(qd) || digits(p.mobile).includes(qd) || digits(p.phone).includes(qd))));
   list = state.patientsSort === 'recent'
-    ? list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+    ? list.sort((a, b) => ((wantHist ? b.archivedAt : b.createdAt) || '').localeCompare((wantHist ? a.archivedAt : a.createdAt) || ''))
     : sortByName(list);
 
   $('#patientCount').textContent = `${list.length} paciente(s)`;
   const box = $('#patientsList');
   if (!list.length) {
-    box.innerHTML = `<div class="card"><div class="card-body">${emptyState('users', db.patients.length ? 'Nenhum paciente encontrado para o filtro.' : 'Nenhum paciente cadastrado.<br><br><button class="btn btn-primary" data-action="new-patient">Cadastrar paciente</button> <button class="btn" data-action="sample-data">Carregar dados de exemplo</button>')}</div></div>`;
+    const emptyMsg = wantHist
+      ? 'Nenhum paciente no histórico.<br>Ao finalizar o tratamento, use <strong>Finalizar e salvar no histórico</strong> no prontuário.'
+      : (db.patients.length
+        ? 'Nenhum paciente em atendimento para o filtro.'
+        : 'Nenhum paciente cadastrado.<br><br><button class="btn btn-primary" data-action="new-patient">Cadastrar paciente</button> <button class="btn" data-action="sample-data">Carregar dados de exemplo</button>');
+    box.innerHTML = `<div class="card"><div class="card-body">${emptyState(wantHist ? 'database' : 'users', emptyMsg)}</div></div>`;
     return;
   }
   if (state.patientsMode === 'grid') {
@@ -525,6 +558,8 @@ function renderPatientsList() {
       const na = nextAppt(p.id);
       const a = age(p.birth);
       const alerts = (p.conditions || []).length || p.allergies;
+      const finished = lastFinishedTreat(p.id);
+      const openN = patientTreatmentsOf(p.id).filter((t) => t.status !== 'concluido').length;
       return `<div class="patient-card" data-action="open-patient" data-id="${p.id}">
         <div class="patient-top">${avatar(p.name)}
           <div style="min-width:0;flex:1">
@@ -538,10 +573,18 @@ function renderPatientsList() {
           <div>${icon('mail')} ${esc(p.email || 'Sem e-mail')}</div>
           <div>${icon('pin')} ${esc([p.district, p.city, p.state].filter(Boolean).join(', ') || 'Endereço não informado')}</div>
           <div>${icon('card')} ${esc(p.insurance || 'Particular')}</div>
+          ${wantHist
+            ? `<div>${icon('clipboard')} ${finished ? esc(finished.procedure) + ' · ' + fmtDate(finished.date) : 'Sem procedimentos concluídos'}</div>`
+            : `<div>${icon('activity')} ${openN} tratamento(s) em aberto</div>`}
         </div>
-        <div>${na ? `<span class="badge b-blue">${icon('clock')} Próxima: ${fmtDate(na.date)} às ${esc(na.time)}</span>` : '<span class="badge b-gray">Sem consulta agendada</span>'}</div>
+        <div>${wantHist
+          ? `<span class="badge b-green">${icon('check')} Finalizado${p.archivedAt ? ' em ' + fmtDate(p.archivedAt) : ''}</span>`
+          : (na ? `<span class="badge b-blue">${icon('clock')} Próxima: ${fmtDate(na.date)} às ${esc(na.time)}</span>` : '<span class="badge b-gray">Sem consulta agendada</span>')}</div>
         <div class="patient-actions">
-          <button class="btn btn-sm" data-action="new-appt" data-patient="${p.id}">${icon('calendar')} Agendar</button>
+          ${wantHist
+            ? `<button class="btn btn-sm btn-primary" data-action="restore-patient" data-id="${p.id}">${icon('back')} Retomar atendimento</button>`
+            : `<button class="btn btn-sm" data-action="new-appt" data-patient="${p.id}">${icon('calendar')} Agendar</button>
+               <button class="btn btn-sm" data-action="archive-patient" data-id="${p.id}" title="Salvar no histórico">${icon('check')} Histórico</button>`}
           <button class="btn-icon" title="Editar" data-action="edit-patient" data-id="${p.id}">${icon('edit')}</button>
           <button class="btn-icon danger" title="Excluir" data-action="delete-patient" data-id="${p.id}">${icon('trash')}</button>
         </div>
@@ -549,18 +592,23 @@ function renderPatientsList() {
     }).join('')}</div>`;
   } else {
     box.innerHTML = `<div class="card"><div class="table-wrap"><table>
-      <thead><tr><th>Paciente</th><th>CPF</th><th>Celular</th><th>Cidade/UF</th><th>Convênio</th><th>Última visita</th><th></th></tr></thead>
+      <thead><tr><th>Paciente</th><th>CPF</th><th>Celular</th><th>${wantHist ? 'Último tratamento' : 'Cidade/UF'}</th><th>${wantHist ? 'Finalizado em' : 'Convênio'}</th><th>${wantHist ? 'Procedimentos' : 'Última visita'}</th><th></th></tr></thead>
       <tbody>${list.map((p) => {
         const lv = lastVisit(p.id);
+        const finished = lastFinishedTreat(p.id);
+        const treats = patientTreatmentsOf(p.id);
         return `<tr style="cursor:pointer" data-action="open-patient" data-id="${p.id}">
           <td><div style="display:flex;gap:10px;align-items:center">${avatar(p.name)}<div><strong>${esc(p.name)}</strong><div class="small muted">${esc(p.email || '')}</div></div></div></td>
           <td>${esc(p.cpf || '-')}</td>
           <td>${esc(p.mobile || p.phone || '-')}</td>
-          <td>${esc([p.city, p.state].filter(Boolean).join(' / ') || '-')}</td>
-          <td>${esc(p.insurance || 'Particular')}</td>
-          <td>${lv ? fmtDate(lv.date) : '-'}</td>
+          <td>${wantHist ? esc(finished?.procedure || '-') : esc([p.city, p.state].filter(Boolean).join(' / ') || '-')}</td>
+          <td>${wantHist ? (p.archivedAt ? fmtDate(p.archivedAt) : '-') : esc(p.insurance || 'Particular')}</td>
+          <td>${wantHist ? `${treats.filter((t) => t.status === 'concluido').length} concluído(s)` : (lv ? fmtDate(lv.date) : '-')}</td>
           <td class="td-actions">
-            <button class="btn-icon" title="Agendar" data-action="new-appt" data-patient="${p.id}">${icon('calendar')}</button>
+            ${wantHist
+              ? `<button class="btn btn-sm btn-primary" data-action="restore-patient" data-id="${p.id}">${icon('back')} Retomar</button>`
+              : `<button class="btn-icon" title="Agendar" data-action="new-appt" data-patient="${p.id}">${icon('calendar')}</button>
+                 <button class="btn-icon" title="Salvar no histórico" data-action="archive-patient" data-id="${p.id}">${icon('check')}</button>`}
             <button class="btn-icon" title="Editar" data-action="edit-patient" data-id="${p.id}">${icon('edit')}</button>
             <button class="btn-icon danger" title="Excluir" data-action="delete-patient" data-id="${p.id}">${icon('trash')}</button>
           </td></tr>`;
@@ -714,6 +762,7 @@ function renderPatient() {
   const hasAlert = (p.conditions || []).length || p.allergies;
   const panels = { resumo: patientResumo, anamnese: patientAnamnese, odontograma: patientOdonto, tratamentos: patientTreatments, consultas: patientAppointments, financeiro: patientFinance };
 
+  const active = isActiveCare(p);
   return `
   <div class="no-print" style="margin-bottom:14px"><button class="btn btn-sm" data-action="nav" data-view="patients">${icon('back')} Voltar para pacientes</button></div>
   <div class="card">
@@ -722,15 +771,20 @@ function renderPatient() {
       <div>
         <h2>${esc(p.name)}</h2>
         <div class="profile-tags">
+          ${active ? '<span class="badge b-orange">Em atendimento</span>' : '<span class="badge b-green">Histórico</span>'}
           ${a !== null ? `<span class="badge b-teal">${a} anos</span>` : ''}
           ${p.gender ? `<span class="badge b-gray">${esc(p.gender)}</span>` : ''}
           <span class="badge b-blue">${icon('card')} ${esc(p.insurance || 'Particular')}</span>
           ${p.cpf ? `<span class="badge b-gray">CPF ${esc(p.cpf)}</span>` : ''}
           <span class="badge b-gray">Paciente desde ${fmtDate(p.createdAt)}</span>
+          ${!active && p.archivedAt ? `<span class="badge b-gray">Finalizado em ${fmtDate(p.archivedAt)}</span>` : ''}
         </div>
       </div>
       <div class="profile-actions no-print">
-        <button class="btn btn-primary" data-action="new-appt" data-patient="${p.id}">${icon('calendar')} Agendar</button>
+        ${active
+          ? `<button class="btn btn-primary" data-action="new-appt" data-patient="${p.id}">${icon('calendar')} Agendar</button>
+             <button class="btn" data-action="archive-patient" data-id="${p.id}">${icon('check')} Finalizar e salvar no histórico</button>`
+          : `<button class="btn btn-primary" data-action="restore-patient" data-id="${p.id}">${icon('back')} Retomar atendimento</button>`}
         ${wa ? `<a class="btn" target="_blank" href="${wa}">${icon('message')} WhatsApp</a>` : ''}
         <button class="btn" data-action="edit-patient" data-id="${p.id}">${icon('edit')} Editar</button>
         <button class="btn" data-action="print">${icon('print')} Imprimir</button>
@@ -756,7 +810,7 @@ function patientResumo(p) {
     ${statCard('calendar', 'c-blue', 'Consultas', appts.length, `${appts.filter((a) => a.status === 'concluido').length} concluída(s)`)}
     ${statCard('clock', 'c-teal', 'Próxima consulta', na ? fmtDate(na.date) : '—', na ? `${esc(na.time)} · ${esc(na.procedure)}` : 'Nenhuma agendada')}
     ${statCard('check', 'c-green', 'Total pago', money(paid))}
-    ${statCard('wallet', 'c-orange', 'Em aberto', money(pending))}
+    ${statCard('wallet', pending ? 'c-red' : 'c-orange', 'Em aberto', `<span style="color:${pending ? 'var(--danger)' : 'inherit'}">${money(pending)}</span>`)}
   </div>
   <div class="grid-equal">
     <div class="card"><div class="card-header"><h3>${icon('user')} Dados pessoais</h3></div>
@@ -834,30 +888,51 @@ function patientOdonto(p) {
     </div></div>`;
 }
 
+function treatRows(list) {
+  return list.map((t) => `<tr>
+    <td>${fmtDate(t.date)}</td>
+    <td><strong>${esc(t.procedure)}</strong>${t.notes ? `<div class="small muted">${esc(t.notes)}</div>` : ''}</td>
+    <td>${esc(t.tooth || '-')}</td>
+    <td>${esc(t.dentist || '-')}</td>
+    <td>${money(t.value)}</td>
+    <td>${badge(TREAT_STATUS, t.status)}</td>
+    <td class="td-actions no-print">
+      <button class="btn-icon" title="Editar" data-action="edit-treat" data-id="${t.id}">${icon('edit')}</button>
+      <button class="btn-icon danger" title="Excluir" data-action="delete-treat" data-id="${t.id}">${icon('trash')}</button>
+    </td></tr>`).join('');
+}
 function patientTreatments(p) {
-  const list = db.treatments.filter((t) => t.patientId === p.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const list = patientTreatmentsOf(p.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const open = list.filter((t) => t.status !== 'concluido');
+  const doneList = list.filter((t) => t.status === 'concluido');
   const total = list.reduce((s, t) => s + Number(t.value || 0), 0);
-  const done = list.filter((t) => t.status === 'concluido').reduce((s, t) => s + Number(t.value || 0), 0);
-  return `<div class="card">
-    <div class="card-header"><h3>${icon('clipboard')} Plano de tratamento</h3>
-      <div style="display:flex;gap:10px;align-items:center">
+  const done = doneList.reduce((s, t) => s + Number(t.value || 0), 0);
+  const active = isActiveCare(p);
+  const table = (rows) => rows.length ? `<div class="table-wrap"><table>
+    <thead><tr><th>Data</th><th>Procedimento</th><th>Dente/Região</th><th>Dentista</th><th>Valor</th><th>Status</th><th></th></tr></thead>
+    <tbody>${treatRows(rows)}</tbody></table></div>` : `<div class="card-body">${emptyState('clipboard', 'Nenhum procedimento nesta lista.')}</div>`;
+
+  return `
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-header"><h3>${icon('clipboard')} Plano de tratamento${active ? '' : ' · Histórico'}</h3>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <span class="muted small">Total: <strong>${money(total)}</strong> · Realizado: <strong>${money(done)}</strong></span>
-        <button class="btn btn-sm btn-primary no-print" data-action="new-treat" data-patient="${p.id}">${icon('plus')} Adicionar procedimento</button>
-      </div></div>
-    <div class="table-wrap">${list.length ? `<table>
-      <thead><tr><th>Data</th><th>Procedimento</th><th>Dente/Região</th><th>Dentista</th><th>Valor</th><th>Status</th><th></th></tr></thead>
-      <tbody>${list.map((t) => `<tr>
-        <td>${fmtDate(t.date)}</td>
-        <td><strong>${esc(t.procedure)}</strong>${t.notes ? `<div class="small muted">${esc(t.notes)}</div>` : ''}</td>
-        <td>${esc(t.tooth || '-')}</td>
-        <td>${esc(t.dentist || '-')}</td>
-        <td>${money(t.value)}</td>
-        <td>${badge(TREAT_STATUS, t.status)}</td>
-        <td class="td-actions no-print">
-          <button class="btn-icon" title="Editar" data-action="edit-treat" data-id="${t.id}">${icon('edit')}</button>
-          <button class="btn-icon danger" title="Excluir" data-action="delete-treat" data-id="${t.id}">${icon('trash')}</button>
-        </td></tr>`).join('')}</tbody></table>` : `<div class="card-body">${emptyState('clipboard', 'Nenhum procedimento no plano de tratamento.')}</div>`}
-    </div></div>`;
+        ${active
+          ? `<button class="btn btn-sm btn-primary no-print" data-action="new-treat" data-patient="${p.id}">${icon('plus')} Adicionar procedimento</button>
+             <button class="btn btn-sm no-print" data-action="archive-patient" data-id="${p.id}" title="Salvar no histórico">${icon('check')} Finalizar e salvar no histórico</button>`
+          : `<button class="btn btn-sm btn-primary no-print" data-action="restore-patient" data-id="${p.id}">${icon('back')} Retomar atendimento</button>`}
+      </div>
+    </div>
+    <div class="card-body" style="padding-bottom:8px">
+      <h4 style="margin:0 0 10px;font-size:14px">${icon('activity')} Em atendimento <span class="badge b-orange">${open.length}</span></h4>
+    </div>
+    ${table(open)}
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>${icon('database')} Histórico de tratamentos finalizados</h3>
+      <span class="badge b-green">${doneList.length} concluído(s)</span></div>
+    ${table(doneList)}
+  </div>`;
 }
 
 function patientAppointments(p) {
@@ -881,7 +956,14 @@ function apptTable(list, showPatient = true) {
 
 function patientFinance(p) {
   const list = db.transactions.filter((t) => t.patientId === p.id).sort((a, b) => b.date.localeCompare(a.date));
-  return `<div class="card">
+  const paid = list.filter((t) => t.type === 'receita' && t.status === 'pago').reduce((s, t) => s + Number(t.value), 0);
+  const pending = list.filter((t) => t.type === 'receita' && t.status === 'pendente').reduce((s, t) => s + Number(t.value), 0);
+  return `
+  <div class="stats" style="margin-bottom:18px">
+    ${statCard('check', 'c-green', 'Recebido', money(paid))}
+    ${statCard('wallet', pending ? 'c-red' : 'c-orange', 'Pendente', `<span style="color:${pending ? 'var(--danger)' : 'inherit'}">${money(pending)}</span>`)}
+  </div>
+  <div class="card">
     <div class="card-header"><h3>${icon('money')} Financeiro do paciente</h3>
       <button class="btn btn-sm btn-primary no-print" data-action="new-tx" data-patient="${p.id}" data-type="receita">${icon('plus')} Novo lançamento</button></div>
     <div class="table-wrap">${list.length ? txTable(list, false) : `<div class="card-body">${emptyState('money', 'Nenhum lançamento financeiro.')}</div>`}</div></div>`;
@@ -916,8 +998,11 @@ function saveTreat(id, patientId) {
   const genTx = data.genTx === 'on';
   delete data.genTx;
   data.value = Number(data.value) || 0;
+  let pid = patientId;
   if (id) {
-    Object.assign(db.treatments.find((x) => x.id === id), data);
+    const cur = db.treatments.find((x) => x.id === id);
+    Object.assign(cur, data);
+    pid = cur.patientId;
   } else {
     const t = { id: uid(), patientId, ...data };
     db.treatments.push(t);
@@ -929,6 +1014,54 @@ function saveTreat(id, patientId) {
     }
   }
   saveDB(); closeModal(); toast('Procedimento salvo.'); render();
+  const p = getPatient(pid);
+  if (p && isActiveCare(p) && data.status === 'concluido' && !hasOpenTreatments(pid)) {
+    confirmDialog(
+      `Todos os tratamentos de <strong>${esc(p.name)}</strong> estão concluídos.<br><br>Deseja salvar o paciente no <strong>histórico</strong>? Você poderá retomá-lo quando ele retornar.`,
+      () => archivePatient(pid, false),
+      { okText: 'Salvar no histórico', danger: false, title: 'Tratamento finalizado' }
+    );
+  }
+}
+
+function archivePatient(id, ask = true) {
+  const p = getPatient(id);
+  if (!p) return;
+  const run = () => {
+    p.careStatus = 'historico';
+    p.archivedAt = todayISO();
+    saveDB();
+    toast(`${p.name} salvo no histórico.`);
+    state.patientsCare = 'historico';
+    if (state.view === 'patient') render();
+    else go('patients');
+  };
+  if (!ask) return run();
+  const open = hasOpenTreatments(id);
+  confirmDialog(
+    open
+      ? `<strong>${esc(p.name)}</strong> ainda possui tratamento(s) em aberto.<br><br>Deseja mesmo finalizar e salvar no histórico?`
+      : `Finalizar atendimento de <strong>${esc(p.name)}</strong> e salvar no histórico?<br><br>O prontuário e os tratamentos concluídos ficam preservados para quando o paciente retornar.`,
+    run,
+    { okText: 'Salvar no histórico', danger: false, title: 'Salvar no histórico' }
+  );
+}
+function restorePatient(id) {
+  const p = getPatient(id);
+  if (!p) return;
+  confirmDialog(
+    `Retomar atendimento de <strong>${esc(p.name)}</strong>?<br><br>O paciente voltará para a área <strong>Em atendimento</strong> com todo o histórico preservado.`,
+    () => {
+      p.careStatus = 'ativo';
+      delete p.archivedAt;
+      saveDB();
+      toast(`${p.name} retomado no atendimento.`);
+      state.patientsCare = 'ativo';
+      if (state.view === 'patient') render();
+      else go('patients');
+    },
+    { okText: 'Retomar atendimento', danger: false, title: 'Retomar atendimento' }
+  );
 }
 
 /* =========================================================
@@ -1068,7 +1201,7 @@ function txTable(list, showPatient = true) {
       ${showPatient ? `<td>${t.patientId ? `<a style="cursor:pointer" data-action="open-patient" data-id="${t.patientId}">${esc(patientName(t.patientId))}</a>` : '<span class="muted">—</span>'}</td>` : ''}
       <td>${esc(t.category || '-')}</td>
       <td>${esc(t.method || '-')}</td>
-      <td style="font-weight:700;color:${t.type === 'receita' ? 'var(--success)' : 'var(--danger)'}">${t.type === 'receita' ? '+' : '−'} ${money(t.value)}</td>
+      <td style="font-weight:700;color:${t.status === 'pendente' ? 'var(--danger)' : (t.type === 'receita' ? 'var(--success)' : 'var(--danger)')}">${t.type === 'receita' ? '+' : '−'} ${money(t.value)}</td>
       <td>${t.status === 'pago' ? '<span class="badge b-green">Pago</span>' : overdue ? '<span class="badge b-red">Vencido</span>' : '<span class="badge b-orange">Pendente</span>'}</td>
       <td class="td-actions no-print">
         ${t.status !== 'pago' ? `<button class="btn btn-sm" data-action="pay-tx" data-id="${t.id}">${icon('check')} Baixar</button>` : ''}
@@ -1369,6 +1502,9 @@ const ACTIONS = {
   'open-patient': (d) => go('patient', { patientId: d.id, patientTab: 'resumo' }),
   'patient-tab': (d) => { state.patientTab = d.tabName; render(); },
   'set-mode': (d) => { state.patientsMode = d.mode; localStorage.setItem('oc_mode', d.mode); render(); },
+  'set-care': (d) => { state.patientsCare = d.care; state.patientsFilter = ''; render(); },
+  'archive-patient': (d) => archivePatient(d.id),
+  'restore-patient': (d) => restorePatient(d.id),
   'cep-lookup': lookupCEP,
 
   'brush': (d) => { state.brush = d.status; render(); },
@@ -1496,10 +1632,15 @@ document.addEventListener('keydown', (e) => {
 
 /* Navegação lateral, busca global e importação */
 $$('#nav a').forEach((a) => a.addEventListener('click', () => go(a.dataset.view)));
-$('#menuToggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+$('#menuToggle').addEventListener('click', () => {
+  if (state.view !== 'dashboard') go('dashboard');
+  else $('#sidebar').classList.toggle('open');
+});
 $('#quickNewPatient').addEventListener('click', () => patientFormModal());
 $('#modalClose').addEventListener('click', closeModal);
 $('#modalBackdrop').addEventListener('mousedown', (e) => { if (e.target.id === 'modalBackdrop') closeModal(); });
+
+$('#overviewMenuBtn').addEventListener('click', () => go('dashboard'));
 
 const gs = $('#globalSearch'), gr = $('#searchResults');
 gs.addEventListener('input', () => {
@@ -1535,7 +1676,25 @@ document.addEventListener('change', (e) => {
   reader.readAsText(file);
 });
 
+/* Relógio digital e data ao vivo */
+function updateLiveClock() {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('pt-BR', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+  });
+  const timeStr = now.toLocaleTimeString('pt-BR', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  });
+  const liveDate = $('#liveDate');
+  const liveClock = $('#liveClock');
+  const todayDate = $('#todayDate');
+  if (liveDate) liveDate.textContent = dateStr;
+  if (liveClock) liveClock.textContent = timeStr;
+  if (todayDate) todayDate.textContent = now.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+}
+
 /* Inicialização */
-$('#todayDate').textContent = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+updateLiveClock();
+setInterval(updateLiveClock, 1000);
 hydrateIcons();
 render();
